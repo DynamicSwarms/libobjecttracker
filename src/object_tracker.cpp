@@ -13,6 +13,7 @@
 
 // TEMP for debug
 #include <cstdio>
+#include <cfloat>
 
 using Point = pcl::PointXYZ;
 using Cloud = pcl::PointCloud<Point>;
@@ -94,6 +95,53 @@ ObjectTracker::ObjectTracker(
   }
 }
 
+void ObjectTracker::addObject(const libobjecttracker::Object& object) 
+{
+  m_objects.push_back(object);
+
+  //m_objects.back().m_lastTransformation = m_objects.back().m_initialTransformation;
+  //m_objects.back().m_lastTransformationValid = true;
+  //m_objects.back().m_lastValidTransform = std::chrono::high_resolution_clock::now();
+  Cloud::Ptr &objMarkers = m_markerConfigurations[object.m_markerConfigurationIdx];
+  size_t const objNpts = objMarkers->size();
+  if (objNpts == 1) m_trackPositionOnly = true;
+  
+  m_objects.back().m_newlyAdded = true;
+}
+
+
+void ObjectTracker::removeObject(
+  const std::string& name)
+{
+  // Because we cannot move or copy our objects this is the only way
+  std::vector<Object> objects;
+  for (auto obj : m_objects) {
+    if (obj.name() == name) continue;
+    objects.push_back(obj);
+  }
+  m_objects.clear();
+  for (auto obj : objects) {
+    m_objects.push_back(obj);
+  }  
+}
+
+bool ObjectTracker::removeAllObjects()
+{
+  bool not_empty = m_objects.size();
+  m_objects.clear();
+  return not_empty;
+}
+
+bool ObjectTracker::trackingValid(
+  const libobjecttracker::Object& object)
+{
+  std::chrono::high_resolution_clock::time_point stamp = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> elapsedSeconds = stamp - object.m_lastValidTransform;
+  double dt = elapsedSeconds.count();
+  
+  return object.m_newlyAdded || dt < 0.5;
+}
+
 void ObjectTracker::update(Cloud::Ptr pointCloud)
 {
   update(std::chrono::high_resolution_clock::now(), pointCloud);
@@ -118,6 +166,35 @@ void ObjectTracker::setLogWarningCallback(
   std::function<void(const std::string&)> logWarn)
 {
   m_logWarn = logWarn;
+}
+
+bool ObjectTracker::initializeSinglePosition(Cloud::ConstPtr markers, libobjecttracker::Object& object) 
+{
+  std::chrono::high_resolution_clock::time_point stamp = std::chrono::high_resolution_clock::now();
+  // Here, we use a simple task assignment to find the best initial matching
+  libMultiRobotPlanning::Assignment<size_t, size_t> assignment;
+
+  for (size_t i = 0; i < markers->size(); ++i) {
+    Eigen::Vector3f marker = pcl2eig((*markers)[i]);
+    auto pi = object.initialCenter();
+    float dist = (pi - marker).norm();
+    long cost = dist * 1000; // cost needs to be an integer -> convert to mm
+    assignment.setCost(0, i, cost);
+  }
+
+  std::map<size_t, size_t> solution; // maps objectId->markerId
+  long totalCost = assignment.solve(solution);
+
+  for (const auto& s : solution) {
+    Eigen::Vector3f marker = pcl2eig((*markers)[s.second]);
+    object.m_lastTransformation = Eigen::Translation3f(marker);
+    object.m_lastValidTransform = stamp;
+    object.m_lastTransformationValid = true;
+    object.m_newlyAdded = false;
+    break;
+  }
+
+  return solution.size() == 1;
 }
 
 bool ObjectTracker::initializePose(Cloud::ConstPtr markersConst)
@@ -268,6 +345,7 @@ void ObjectTracker::updatePose(std::chrono::high_resolution_clock::time_point st
     // Doesn't make too much sense to continue here - lets wait to be fully initialized
     return;
   }
+
 
   ICP icp;
   // pcl::registration::TransformationEstimationLM<Point, Point>::Ptr trans(new pcl::registration::TransformationEstimationLM<Point, Point>);
@@ -425,6 +503,11 @@ void ObjectTracker::updatePosition(std::chrono::high_resolution_clock::time_poin
   std::chrono::duration<double> lastCallElapsedSeconds = stamp-lastCall;
   double lastCalldt = lastCallElapsedSeconds.count();
   lastCall = stamp;
+
+  // If we newly added a object we search for it
+  for (auto& object : m_objects) { 
+    if (object.m_newlyAdded) initializeSinglePosition(markers, object);
+  }
 
   if (markers->empty()) {
     for (auto& object : m_objects) {

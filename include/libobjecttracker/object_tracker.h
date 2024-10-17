@@ -57,6 +57,7 @@ namespace libobjecttracker {
     std::chrono::time_point<std::chrono::high_resolution_clock> m_lastValidTransform;
     bool m_lastTransformationValid;
     std::string m_name;
+    bool m_newlyAdded;
 
     friend ObjectTracker;
     friend PointCloudDebugger;
@@ -71,6 +72,17 @@ namespace libobjecttracker {
       const std::vector<DynamicsConfiguration>& dynamicsConfigurations,
       const std::vector<MarkerConfiguration>& markerConfigurations,
       const std::vector<Object>& objects);
+    
+    void addObject(
+      const libobjecttracker::Object& object);
+
+    void removeObject(
+      const std::string& name);
+
+    bool removeAllObjects();
+
+    bool trackingValid(
+      const libobjecttracker::Object& object);
 
     void update(
       pcl::PointCloud<pcl::PointXYZ>::Ptr pointCloud);
@@ -88,6 +100,11 @@ namespace libobjecttracker {
     // Update and init using ICP
     void updatePose(std::chrono::high_resolution_clock::time_point stamp,
       const pcl::PointCloud<pcl::PointXYZ>::ConstPtr markers);
+
+    bool initializeSinglePosition(
+      pcl::PointCloud<pcl::PointXYZ>::ConstPtr markers,
+      libobjecttracker::Object& object);
+
 
     bool initializePose(
       pcl::PointCloud<pcl::PointXYZ>::ConstPtr markers);
