@@ -40,6 +40,8 @@ namespace libobjecttracker {
 
     bool lastTransformationValid() const;
 
+    double timeSinceLastValidTransform() const;
+
     std::chrono::time_point<std::chrono::high_resolution_clock> lastValidTime() const {
       return m_lastValidTransform;
     }

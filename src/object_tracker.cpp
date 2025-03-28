@@ -68,6 +68,16 @@ bool Object::lastTransformationValid() const
   return m_lastTransformationValid;
 }
 
+double Object::timeSinceLastValidTransform() const
+{
+  auto stamp = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> elapsedSeconds = stamp - m_lastValidTransform;
+  double dt = elapsedSeconds.count();
+  return dt;
+}
+
+
+
 /////////////////////////////////////////////////////////////
 
 ObjectTracker::ObjectTracker(
@@ -549,9 +559,9 @@ void ObjectTracker::updatePosition(std::chrono::high_resolution_clock::time_poin
     std::chrono::duration<double> elapsedSeconds = stamp-object.m_lastValidTransform;
     double dt = elapsedSeconds.count();
     if (dt > 0.5) {
-      std::stringstream sstr;
-      sstr << "Lost tracking for object " << object.name() << " skipping";
-      logWarn(sstr.str());
+      // std::stringstream sstr;
+      // sstr << "Lost tracking for object " << object.name() << " skipping" << std::endl;
+      // logWarn(sstr.str());
       continue;
     }
 
@@ -561,7 +571,7 @@ void ObjectTracker::updatePosition(std::chrono::high_resolution_clock::time_poin
 
     if (nFound < 1) {
       std::stringstream sstr;
-      sstr << "error: no neighbors found for object " << object.name();
+      sstr << "error: no neighbors found for object " << object.name() << std::endl;
       logWarn(sstr.str());
       continue;
     }
@@ -589,9 +599,11 @@ void ObjectTracker::updatePosition(std::chrono::high_resolution_clock::time_poin
       }
     }
     if (!foundPotentialMarker) {
-      std::stringstream sstr;
-      sstr << "all dynamic check failed for object " << object.name() << std::endl;
-      logWarn(sstr.str());
+      if (dt > 0.1) {
+        std::stringstream sstr;
+        sstr << "No marker found with dynamic check for object " << object.name() << " for "<< dt << " s"  << std::endl;  
+        logWarn(sstr.str());
+      }
     }
   }
 
@@ -604,10 +616,16 @@ void ObjectTracker::updatePosition(std::chrono::high_resolution_clock::time_poin
     std::chrono::duration<double> elapsedSeconds = stamp-object.m_lastValidTransform;
     double dt = elapsedSeconds.count();
 
-    object.m_velocity = (marker - object.center()) / dt;
-    object.m_lastTransformation = Eigen::Translation3f(marker);
-    object.m_lastValidTransform = stamp;
-    object.m_lastTransformationValid = true;
+    if ((marker - object.center()).norm() > 0.15) {
+      std::stringstream sstr;
+      sstr << "Avoided marker jump for object " << object.name()  << std::endl;  
+      logWarn(sstr.str());
+    } else {
+      object.m_velocity = (marker - object.center()) / dt;
+      object.m_lastTransformation = Eigen::Translation3f(marker);
+      object.m_lastValidTransform = stamp;
+      object.m_lastTransformationValid = true;
+    }
   }
 }
 
