@@ -616,16 +616,10 @@ void ObjectTracker::updatePosition(std::chrono::high_resolution_clock::time_poin
     std::chrono::duration<double> elapsedSeconds = stamp-object.m_lastValidTransform;
     double dt = elapsedSeconds.count();
 
-    if ((marker - object.center()).norm() > 0.15) {
-      std::stringstream sstr;
-      sstr << "Avoided marker jump for object " << object.name()  << std::endl;  
-      logWarn(sstr.str());
-    } else {
-      object.m_velocity = (marker - object.center()) / dt;
-      object.m_lastTransformation = Eigen::Translation3f(marker);
-      object.m_lastValidTransform = stamp;
-      object.m_lastTransformationValid = true;
-    }
+    object.m_velocity = (marker - object.center()) / dt;
+    object.m_lastTransformation = Eigen::Translation3f(marker);
+    object.m_lastValidTransform = stamp;
+    object.m_lastTransformationValid = true;
   }
 }
 
