@@ -3,6 +3,7 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include "libobjecttracker/object_tracker.h"
+#include "libobjecttracker/conversions.hpp"
 
 #include <chrono>
 #include <cstdio>
@@ -36,7 +37,7 @@ namespace libobjecttracker {
 
 		void log(pcl::PointCloud<pcl::PointXYZ>::ConstPtr cloud)
 		{
-			auto stamp = std::chrono::high_resolution_clock::now();
+			auto stamp = std::chrono::steady_clock::now();
 			if (start == (decltype(start)())) {
 				start = stamp;
 			}
@@ -69,7 +70,7 @@ namespace libobjecttracker {
 			s.write((char const *)&t, sizeof(T));
 		}
 		std::ofstream file;
-		std::chrono::high_resolution_clock::time_point start;
+			std::chrono::steady_clock::time_point start;
 	};
 
 	class PointCloudPlayer
@@ -103,11 +104,13 @@ namespace libobjecttracker {
 
 		void play(libobjecttracker::ObjectTracker &tracker) const
 		{
+			uint32_t previous_millis = 0;
 			for (size_t i = 0; i < clouds.size(); ++i) {
 				std::cout << "\n  " << i << "  ------------------------------\n";
-				auto dur = std::chrono::milliseconds(timestamps[i]);
-				std::chrono::high_resolution_clock::time_point stamp(dur);
-				tracker.update(stamp, clouds[i]);
+				const auto dt = std::chrono::milliseconds(
+					timestamps[i] - previous_millis);
+				tracker.update(dt, clouds[i]);
+				previous_millis = timestamps[i];
 			}
 		}
 
@@ -131,36 +134,31 @@ namespace libobjecttracker {
 
 		void convert(libobjecttracker::ObjectTracker & tracker, std::vector<MarkerConfiguration> & config)
 		{
-			auto eig2pcl = [](Eigen::Vector3f v) {
-			  return pcl::PointXYZ(v.x(), v.y(), v.z());
-			};
-			auto pcl2eig =[](Point p) {
-			  return Eigen::Vector3f(p.x, p.y, p.z);
-			};
-
 			//play points
+			uint32_t previous_millis = 0;
 			for (size_t i = 0; i < clouds.size(); ++i) {
 				std::cout << "\n  " << i << "  ------------------------------\n";
-				auto dur = std::chrono::milliseconds(timestamps[i]);
-				std::chrono::high_resolution_clock::time_point stamp(dur);
-				tracker.update(stamp, clouds[i]);
+				const auto dt = std::chrono::milliseconds(
+					timestamps[i] - previous_millis);
+				tracker.update(dt, clouds[i]);
+				previous_millis = timestamps[i];
 				//continue;
 				//make another output cloud
 				matches.emplace_back(new pcl::PointCloud<pcl::PointXYZ>());
 				matches.back()->reserve(markermax);
 				//read updated objects
-				const std::vector<Object> & objects = tracker.objects();
+				const auto objects = tracker.objects();
 				int a = 0;
-				for (auto & object : objects) {
+				for (const auto* object : objects) {
 					++a;
 					std::cout << "Object vector size: " << objects.size() << "\n";
 					std::cout << "Object " << a << " processing\n";
 					//debugging stuff
-					Cloud::Ptr &objMarkers = config[object.m_markerConfigurationIdx];
+					Cloud::Ptr &objMarkers = config[object->m_marker_configuration_idx];
 					size_t const objNpts = objMarkers->size();
 					for (size_t j = 0; j < objNpts; ++j) { //for each marker
-						auto p = object.transformation() * pcl2eig((*objMarkers)[j]); //get real position
-						matches.back()->push_back(eig2pcl(p));
+						auto p = object->transformation() * to_eigen((*objMarkers)[j]); //get real position
+						matches.back()->push_back(to_pcl(p));
 					}
 				}
 			}

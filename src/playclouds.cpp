@@ -1,5 +1,6 @@
 #include "libobjecttracker/object_tracker.h"
 #include "libobjecttracker/cloudlog.hpp"
+#include "libobjecttracker/conversions.hpp"
 #include "yaml-cpp/yaml.h"
 
 #include <cassert>
@@ -13,11 +14,6 @@ static std::string YAMLDIR = "../../../../crazyswarm/launch";
 static void log_stderr(std::string s)
 {
   std::cout << s << "\n";
-}
-
-static pcl::PointXYZ eig2pcl(Eigen::Vector3f v)
-{
-  return pcl::PointXYZ(v.x(), v.y(), v.z());
 }
 
 std::string wholefile(std::string path)
@@ -67,7 +63,7 @@ static void readMarkerConfigurations(
       new pcl::PointCloud<pcl::PointXYZ>));
     for (auto &&point : val["points"]) {
       auto pt = asVec(point.second) + offset;
-      markerConfigurations.back()->push_back(eig2pcl(pt));
+      markerConfigurations.back()->push_back(libobjecttracker::to_pcl(pt));
     }
   }
 }
